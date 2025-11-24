@@ -1,0 +1,281 @@
+---
+title: "Final Project"
+author: "Gino Pak"
+date: "22/04/2022"
+output: word_document
+---
+
+
+# Section 1 credit_risk Data Setup
+
+## Section 1.1 Data Importing
+```{r}
+# load the data
+credit_risk = read.csv("C:\\Users\\user\\Desktop\\Western 2021-2022\\SS 3860\\credit_risk_dataset.csv")
+```
+
+## Section 1.2 Data and Variable Examination
+```{r}
+# Examine the data
+str(credit_risk)
+head(credit_risk, 5)
+```
+
+## Section 1.3 Transforming variables
+```{r}
+# Transform the variables into factors 
+credit_risk$loan_status <- as.factor(credit_risk$loan_status)
+credit_risk$person_home_ownership <- as.factor(credit_risk$person_home_ownership)
+credit_risk$loan_intent <- as.factor(credit_risk$loan_intent)
+credit_risk$loan_grade <- as.factor(credit_risk$loan_grade)
+credit_risk$cb_person_default_on_file <- as.factor(credit_risk$cb_person_default_on_file)
+
+str(credit_risk)
+
+```
+
+## Section 1.4 Data Examination
+```{r}
+# checking if there is missing values in the data 
+summary(credit_risk)
+
+```
+
+## Section 1.5 Outlier Examination
+```{r}
+plot(credit_risk$person_age, credit_risk$person_emp_length, xlab = "Age", ylab = "Employment Length")
+```
+
+
+## Section 1.6 Data Clean Up
+```{r}
+# Remove rows with missing values
+credit_risk = credit_risk[rowSums(is.na(credit_risk)) == 0,]
+```
+
+```{r}
+# Remove the person/row with 123 years that person is employed, in row 1
+credit_risk = credit_risk[!(credit_risk$person_emp_length == 123),]
+
+# Remove the person/row 144 years old
+credit_risk = credit_risk[!(credit_risk$person_age == 144),]
+
+# Remove the person/row 123 years old
+credit_risk = credit_risk[!(credit_risk$person_age == 123),]
+```
+
+## Section 1.7 Data Examination after clean up 
+```{r}
+# check the data to see the removed data
+summary(credit_risk)
+```
+
+
+# Section 2 Plots for variable investigation
+
+```{r}
+suppressMessages(library(ggplot2))
+
+# Check the relationship between age and income labelled by home ownership status of the person
+ggplot(credit_risk, aes(x = person_age, y = person_income, color = person_home_ownership)) +
+         geom_point() + xlab("Person Age") + ylab("Income") + labs(color = "Home Ownership Status") +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+# Relationship between loan amount and loan interest rate categorized by previous history of defaulting
+ggplot(credit_risk, aes(loan_percent_income, loan_int_rate, color = loan_status)) + geom_point() + xlab("Loan Percent Income") + ylab("Loan Interest Rate") + labs(color = "Loan Status") + theme(legend.position = "bottom")
+```
+
+
+```{r}
+# Relationship between person's age and loan interest rate categorized by loan grade of the person.
+ggplot(credit_risk, aes(person_age, loan_int_rate, color = loan_grade)) + geom_point() + xlab("Person Age") + ylab("Loan Interest Rate") + labs(color = "Loan Grade") + theme(legend.position = "bottom")
+```
+
+
+```{r}
+# Histogram of loan interest rate categorized by loan status
+ggplot(credit_risk, aes(color = loan_status, loan_int_rate)) + geom_histogram(binwidth = 0.5) + xlab("Loan Interest Rate") + ylab("Density") + labs(color = "Loan Status") + theme(legend.position = "bottom")
+```
+
+
+```{r}
+# Histogram of loan amount categorized by loan status
+ggplot(credit_risk, aes(loan_amnt, color = loan_status)) + geom_histogram(binwidth = 1000) + xlab("Loan Amount") + ylab("Density") + labs(color = "Loan Status") + theme(legend.position = "bottom")
+```
+
+
+```{r}
+# bar graph of home ownership and the default status
+ggplot(credit_risk, aes(x = loan_status, fill = person_home_ownership)) + geom_bar(position = "fill") + theme(legend.position = "bottom") + xlab("Loan Status (0 = non-default, 1 = default)") + ylab("Home Ownership Percentage") + labs(fill = "Ownership Type")
+```
+
+
+# Section 3 Initial Model Fitting
+
+```{r}
+# Model with all the predictors in the data
+mod = glm(loan_status ~ ., data = credit_risk, family = binomial)
+
+suppressMessages(library(faraway))
+summary(mod)
+```
+
+
+# Section 4 Model Fitting
+
+## Section 4.1 Model fitting 
+```{r}
+# Model without the cb_person_default_on_file and cb_person_cred_hist_length and loan_percent_income
+model = glm(loan_status ~ person_age + person_income + person_emp_length + loan_amnt + loan_int_rate + loan_intent + loan_grade + person_home_ownership, data = credit_risk, family = binomial)
+
+summary(model)
+```
+
+## Section 4.2 Variable Importance Check
+```{r}
+# anova test of which predictor is statistically not significant
+anova(model, test = "Chisq")
+```
+
+# Section 5 Investigation of the fitted model
+
+## Section 5.1 Estimated coefficients and odds ratio
+```{r}
+# table of estimated betas and odds ratio of each predictor
+cbind(Betas = round(coef(model), 4), OddsRatio = round(exp(coef(model)), 5))
+```
+
+
+## Section 5.2 Goodness of fit test
+```{r}
+# Hosmer Lemmshow goodness of fit test to see the if the model has lack of fit
+suppressMessages(library(ResourceSelection))
+hoslem.test(model$y, fitted(model), g = 10)
+
+# failed because of data > 1000 observations
+
+# Full vs Null model
+nullmod = glm(loan_status ~ 1 , data = credit_risk, family = binomial)
+
+suppressMessages(library(lmtest))
+lrtest(nullmod, model)
+```
+
+## Section 5.3 Prediction
+```{r}
+# linear prediction
+linpred = predict(model)
+head(linpred, 5)    # First 5 predictions
+
+# predicted probabilities
+pred_prob = predict(model, type = "response")
+head(pred_prob, 5)    # First 5 predicted probabilities
+
+```
+
+# Section 6 Training the data for model evaluation
+
+## Section 6.1 Train and test data split
+```{r}
+# Create a train and test sets
+data = credit_risk
+len_x = dim(data)[1]
+set.seed(123)
+index_ran = sample(1:len_x, len_x)
+train_size = len_x * 0.8
+train = data[index_ran[1:train_size],]
+test = data[index_ran[(train_size + 1):len_x],]
+
+xtrain = train
+xtrain$loan_status = NULL
+xtest = test
+xtest$loan_status = NULL
+
+```
+
+
+## Section 6.2 Training the model
+```{r}
+# Train the model 
+logi_model = glm(loan_status ~ person_age + person_income + person_emp_length + loan_amnt + loan_int_rate + loan_intent + loan_grade + person_home_ownership, data = train, family = binomial)
+
+```
+
+
+# Section 7: Discrimination Analysis
+
+## Section 7.1 Confusion matrix 
+```{r}
+# Confusion matrix on the training data
+suppressMessages(library(dplyr))
+testm = mutate(test, predprob = predict(logi_model, newdata = xtest, type = "response"))
+
+testm = mutate(testm, predout = ifelse(predprob < 0.5, "no", "yes"))
+conf_mat = xtabs(~ loan_status + predout, testm)
+conf_mat
+```
+
+
+## Section 7.2 Model evaluation 
+```{r}
+# Accuracy
+acc = (conf_mat[1,1] + conf_mat[2,2]) / sum(conf_mat)
+acc
+
+# Sensitivity = True positive rate
+sen = conf_mat[2, 2] / sum(conf_mat[, 2])
+sen
+
+# Specificity = True Negative Rate = Negative Predictive Rate
+spe = conf_mat[1,1] / sum(conf_mat[1, ])
+spe
+
+```
+
+
+```{r}
+# ROC Curve
+suppressMessages(library(pROC))
+roc_obj = roc(response = testm$loan_status, predictor = testm$predprob)
+plot(roc_obj, legacy.axes = FALSE, print.auc = TRUE, print.thres = TRUE, cex.lab = 1)
+
+```
+
+
+# Section 8: Prediction Analysis
+
+```{r}
+# Examine whether the data was predicted correctly
+
+# create a data frame with predicted values and length of the data
+predicted_data <- data.frame(prob_default = model$fitted.values, default = credit_risk$loan_status)
+
+predicted_data <- predicted_data[order(predicted_data$prob_default, decreasing = FALSE),]
+predicted_data$rank <- 1:nrow(predicted_data)
+
+# Plot of predicted probability of whether the person defaulted
+ggplot(predicted_data, aes(x=rank, y=prob_default)) +
+  geom_point(aes(color = default), alpha = 1, stroke = 2) +
+  xlab("Index") + ylab("Predicted probability of default")
+```
+
+
+## Citations for the packages
+
+```{r}
+# Citations 
+citation("faraway")
+citation("ggplot2")
+citation("ResourceSelection")
+citation("lmtest")
+citation("dplyr")
+citation("pROC")
+```
+
+
+
+
+
+
